@@ -10,3 +10,7 @@ coverage
 *.db-shm
 test
 README.md
+*.log
+logs
+.github
+.gitleaks.toml
