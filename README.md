@@ -4,6 +4,7 @@ Bot Telegram untuk chain CointMU (PoW, chain ID 1912, Geth 1.10.26):
 
 1. **Mengumumkan block baru**: siapa (alamat wallet) yang mendapat block berapa, beserta hash, nonce, mixHash, difficulty dan estimasi hashrate jaringan. Statusnya diperbarui saat block final atau kalah reorg.
 2. **Memberi alert kesehatan node** ke chat terpisah: RPC mati, head tidak naik, peer kurang, atau node sedang syncing. Bot juga mengirim kabar saat node pulih, lengkap dengan durasi gangguan.
+3. **Opsional: memposting setiap block final ke Discord** `#block-update` lewat webhook (bagian 10). Alert kesehatan tetap hanya ke Telegram.
 
 Bot **hanya** memanggil method RPC baca: `eth_blockNumber`, `eth_getBlockByNumber`, `net_peerCount`, `eth_syncing`, `eth_chainId`. Method lain ditolak di kode sebelum dikirim (lihat `src/rpc/client.ts`).
 
@@ -66,35 +67,36 @@ Catatan:
 
 Salin `.env.example` menjadi `.env`, lalu isi. Semua variabel:
 
-| Variabel                     | Default         | Keterangan                                                                                                        |
-| ---------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `RPC_URL`                    | —               | **Wajib**. RPC HTTP node CointMU, mis. `http://<GETH_HOST>:<PORT>`                                                |
-| `RPC_TIMEOUT_MS`             | `5000`          | Timeout tiap panggilan RPC                                                                                        |
-| `EXPECTED_CHAIN_ID`          | `1912`          | Bot berhenti saat start kalau chain ID tidak cocok                                                                |
-| `BOT_TOKEN`                  | —               | **Wajib** (kecuali `DRY_RUN=true`)                                                                                |
-| `CHAT_ID`                    | kosong          | Opsional. Chat/channel pengumuman; kalau diisi, `/setchat` dikunci                                                |
-| `ALERT_CHAT_ID`              | kosong          | Opsional. Chat alert; kalau diisi, `/setalert` dikunci                                                            |
-| `ALLOWED_USER_IDS`           | kosong          | Opsional. Admin dari env (dipisah koma); mematikan kode klaim dan tidak bisa dihapus lewat chat                   |
-| `ALLOWED_CHAT_IDS`           | kosong          | Opsional. Selain chat pengumuman, semua anggota chat ini boleh memakai `/status` `/last` `/top`                   |
-| `COMMAND_COOLDOWN_SECONDS`   | `5`             | Jeda minimal antar command/tombol per user (admin tidak terkena)                                                  |
-| `COMMAND_QUEUE_MAX`          | `20`            | Maksimal balasan command yang menunggu di antrean; lebih dari itu ditolak ("lagi ramai")                          |
-| `COMMAND_REPLIES_PER_MINUTE` | `8`             | Maksimal balasan command per menit per grup                                                                       |
-| `DUPLICATE_WINDOW_SECONDS`   | `10`            | Tampilan yang sama (status/last/top) tidak dikirim ulang ke chat yang sama dalam jendela ini                      |
-| `POLL_INTERVAL_MS`           | `1000`          | Interval cek `eth_blockNumber`                                                                                    |
-| `SEND_INTERVAL_MS`           | `10000`         | Interval kirim digest                                                                                             |
-| `MIN_SEND_GAP_MS`            | `3000`          | Jeda minimal antar pesan/edit ke Telegram                                                                         |
-| `CONFIRMATIONS`              | `6`             | Konfirmasi untuk dianggap final (head − number + 1)                                                               |
-| `HASHRATE_WINDOW`            | `20`            | Jumlah block untuk rata-rata hashrate                                                                             |
-| `START_BACKFILL`             | `50`            | Saat DB kosong: N block terakhir disimpan diam-diam (statistik saja)                                              |
-| `MIN_PEERS`                  | `1`             | Alert kalau `net_peerCount` di bawah ini                                                                          |
-| `STALL_MINUTES`              | `5`             | Alert kalau head tidak naik selama ini; `0` = matikan (untuk maintenance)                                         |
-| `RPC_FAIL_THRESHOLD`         | `10`            | Alert setelah N poll gagal berturut-turut                                                                         |
-| `ALERT_COOLDOWN_MINUTES`     | `10`            | Insiden sejenis yang kambuh dalam masa ini tidak di-alert ulang, kecuali masih berlangsung setelah cooldown habis |
-| `HEARTBEAT_URL`              | kosong          | Di-ping tiap 60 detik selama collector sehat (mis. healthchecks.io)                                               |
-| `DB_PATH`                    | `./data/bot.db` | File SQLite (`./data/dry-run.db` saat dry-run)                                                                    |
-| `DATA_RETENTION_DAYS`        | `30`            | Data yang lebih tua dari ini dihapus tiap jam                                                                     |
-| `DRY_RUN`                    | `false`         | `true` = cetak ke konsol, tidak kirim ke Telegram                                                                 |
-| `LOG_LEVEL`                  | `info`          | `debug`/`info`/`warn`/`error`                                                                                     |
+| Variabel                       | Default         | Keterangan                                                                                                        |
+| ------------------------------ | --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `RPC_URL`                      | —               | **Wajib**. RPC HTTP node CointMU, mis. `http://<GETH_HOST>:<PORT>`                                                |
+| `RPC_TIMEOUT_MS`               | `5000`          | Timeout tiap panggilan RPC                                                                                        |
+| `EXPECTED_CHAIN_ID`            | `1912`          | Bot berhenti saat start kalau chain ID tidak cocok                                                                |
+| `BOT_TOKEN`                    | —               | **Wajib** (kecuali `DRY_RUN=true`)                                                                                |
+| `CHAT_ID`                      | kosong          | Opsional. Chat/channel pengumuman; kalau diisi, `/setchat` dikunci                                                |
+| `ALERT_CHAT_ID`                | kosong          | Opsional. Chat alert; kalau diisi, `/setalert` dikunci                                                            |
+| `ALLOWED_USER_IDS`             | kosong          | Opsional. Admin dari env (dipisah koma); mematikan kode klaim dan tidak bisa dihapus lewat chat                   |
+| `ALLOWED_CHAT_IDS`             | kosong          | Opsional. Selain chat pengumuman, semua anggota chat ini boleh memakai `/status` `/last` `/top`                   |
+| `COMMAND_COOLDOWN_SECONDS`     | `5`             | Jeda minimal antar command/tombol per user (admin tidak terkena)                                                  |
+| `COMMAND_QUEUE_MAX`            | `20`            | Maksimal balasan command yang menunggu di antrean; lebih dari itu ditolak ("lagi ramai")                          |
+| `COMMAND_REPLIES_PER_MINUTE`   | `8`             | Maksimal balasan command per menit per grup                                                                       |
+| `DUPLICATE_WINDOW_SECONDS`     | `10`            | Tampilan yang sama (status/last/top) tidak dikirim ulang ke chat yang sama dalam jendela ini                      |
+| `POLL_INTERVAL_MS`             | `1000`          | Interval cek `eth_blockNumber`                                                                                    |
+| `SEND_INTERVAL_MS`             | `10000`         | Interval kirim digest                                                                                             |
+| `MIN_SEND_GAP_MS`              | `3000`          | Jeda minimal antar pesan/edit ke Telegram                                                                         |
+| `CONFIRMATIONS`                | `6`             | Konfirmasi untuk dianggap final (head − number + 1)                                                               |
+| `HASHRATE_WINDOW`              | `20`            | Jumlah block untuk rata-rata hashrate                                                                             |
+| `START_BACKFILL`               | `50`            | Saat DB kosong: N block terakhir disimpan diam-diam (statistik saja)                                              |
+| `MIN_PEERS`                    | `1`             | Alert kalau `net_peerCount` di bawah ini                                                                          |
+| `STALL_MINUTES`                | `5`             | Alert kalau head tidak naik selama ini; `0` = matikan (untuk maintenance)                                         |
+| `RPC_FAIL_THRESHOLD`           | `10`            | Alert setelah N poll gagal berturut-turut                                                                         |
+| `ALERT_COOLDOWN_MINUTES`       | `10`            | Insiden sejenis yang kambuh dalam masa ini tidak di-alert ulang, kecuali masih berlangsung setelah cooldown habis |
+| `HEARTBEAT_URL`                | kosong          | Di-ping tiap 60 detik selama collector sehat (mis. healthchecks.io)                                               |
+| `DISCORD_WEBHOOK_BLOCK_UPDATE` | kosong          | Opsional, **rahasia**. Webhook Discord `#block-update`; kosong = Discord mati (bagian 10)                         |
+| `DB_PATH`                      | `./data/bot.db` | File SQLite (`./data/dry-run.db` saat dry-run)                                                                    |
+| `DATA_RETENTION_DAYS`          | `30`            | Data yang lebih tua dari ini dihapus tiap jam                                                                     |
+| `DRY_RUN`                      | `false`         | `true` = cetak ke konsol, tidak kirim ke Telegram                                                                 |
+| `LOG_LEVEL`                    | `info`          | `debug`/`info`/`warn`/`error`                                                                                     |
 
 ## 4. Menjalankan
 
@@ -123,7 +125,7 @@ npm start          # membaca .env otomatis (node --env-file-if-exists)
 
 ### Mode dry-run
 
-Pesan dicetak ke konsol. Tidak ada yang dikirim ke Telegram, command tidak aktif, dan tidak ada kode klaim. Tujuan pengumuman dan alert otomatis diisi `dry-run`.
+Pesan dicetak ke konsol. Tidak ada yang dikirim ke Telegram maupun Discord, command tidak aktif, dan tidak ada kode klaim. Tujuan pengumuman dan alert otomatis diisi `dry-run`. Payload Discord (JSON embed) juga dicetak, meskipun `DISCORD_WEBHOOK_BLOCK_UPDATE` kosong.
 
 ```bash
 DRY_RUN=true RPC_URL=http://127.0.0.1:8545 npm run dry-run
@@ -296,9 +298,10 @@ src/
   config.ts              validasi env (zod)
   rpc/                   whitelist method baca + validasi block
   collector/             polling head, backfill, deteksi reorg, probe peer/syncing
-  sender/                digest + edit status
+  sender/                digest + edit status Telegram, posting Discord
+  discord/               client webhook Discord, dry-run
   telegram/              client HTTP, antrean rate-limit, dry-run
-  render/                format kartu, escape HTML, pemecahan pesan
+  render/                format kartu, escape HTML, pemecahan pesan, embed Discord
   health/                kondisi, insiden + alert, heartbeat
   commands/              router command & tombol (akses, cooldown, antrean), menu, konfirmasi, pilih admin
   settings/              tujuan & admin (env + SQLite), kode klaim admin
@@ -348,3 +351,54 @@ docker compose up -d --build
 ```
 
 Kembali ke `main` dengan `git checkout main && git pull --ff-only` setelah perbaikannya di-merge.
+
+## 10. Discord #block-update
+
+Setiap block yang sudah **final** juga diposting ke channel Discord `#block-update`, dengan data yang sama seperti kartu Telegram (block, wallet penuh, hash, prev block, nonce, mixHash, difficulty, hashrate, status, bonus).
+
+### Setup webhook
+
+1. Di Discord: klik kanan channel `#block-update` → **Edit Channel** → **Integrations** → **Webhooks** → **New Webhook**. Beri nama (mis. `CointMU Mining Feed`), lalu **Copy Webhook URL**.
+2. Tempel ke `.env` di server (bukan ke chat, issue, atau command line):
+   ```
+   DISCORD_WEBHOOK_BLOCK_UPDATE=https://discord.com/api/webhooks/<id>/<token>
+   ```
+   URL ini **rahasia**: siapa pun yang memegangnya bisa memposting ke channel. Kalau bocor, hapus webhook-nya di Discord lalu buat yang baru. Bot hanya menerima `https://discord.com/api/webhooks/<id>/<token>` (juga `discordapp.com` dan `/api/v10/...`), dan URL tidak pernah ditulis ke log.
+3. Restart bot (`docker compose up -d`). Log start menampilkan `"discord":true`.
+
+Kosongkan variabelnya untuk mematikan Discord. Telegram tidak terpengaruh.
+
+### Tes webhook
+
+Dari folder bot di server. URL dibaca dari `.env` lewat stdin `curl -K -`, jadi tidak muncul di command line maupun `ps`:
+
+```bash
+printf 'url = "%s?wait=true"\n' "$(grep -m1 '^DISCORD_WEBHOOK_BLOCK_UPDATE=' .env | cut -d= -f2-)" \
+  | curl -sS -K - -H 'content-type: application/json' \
+      -d '{"content":"tes webhook CointMU","allowed_mentions":{"parse":[]}}' \
+      -o /dev/null -w '%{http_code}\n'
+```
+
+`200` = berhasil (pesan "tes webhook CointMU" muncul di channel). `401`/`404` = URL salah atau webhook sudah dihapus.
+
+### Perilaku
+
+- **Hanya block final** (`CONFIRMATIONS`, default 6) yang diposting, sekali, dan tidak pernah diedit. Block yang kalah reorg sebelum final tidak diposting. Batasannya: reorg yang lebih dalam dari `CONFIRMATIONS` tidak dikoreksi di Discord (di Telegram dikoreksi lewat edit).
+- Satu pesan berisi maksimal **10 embed** dan 6000 karakter embed; batch yang lebih besar dipecah. Tidak ada `content` dan `allowed_mentions` selalu `{"parse": []}`, jadi tidak ada yang ter-ping.
+- Status terkirim dicatat per block di SQLite (`blocks.discord_sent`), **terpisah dari Telegram**. Discord mati atau kena rate limit tidak menahan atau menggandakan pengiriman Telegram, dan Discord menyusul setelah pulih.
+- HTTP 429: bot menunggu persis `retry_after` lalu mencoba lagi; header `X-RateLimit-Remaining: 0` juga dihormati. Error lain (5xx, timeout, jaringan): backoff 10 dtk, 20 dtk, … sampai maksimal 5 menit. Tidak ada block yang ditandai terkirim sebelum Discord menjawab sukses.
+- **Batas backlog 100 block.** Kalau lebih banyak yang menunggu (mis. setelah Discord mati lama), block yang lebih lama diganti satu embed ringkasan `⏩ Discord tertinggal: N block (#a–#b)`, lalu 100 block terbaru diposting.
+- Restart aman: block yang sudah diposting tidak diposting ulang, dan yang belum diposting menyusul. Satu-satunya celah duplikasi sama seperti Telegram: proses mati (atau timeout) tepat setelah Discord menyimpan pesan tetapi sebelum DB ditulis.
+- Block yang tersimpan selama Discord mati (variabel kosong) tidak pernah diposting belakangan; setelah diaktifkan, hanya block baru yang diposting.
+- Alert kesehatan node (RPC mati, stall, peer, syncing, reorg dalam) **tetap hanya ke Telegram**.
+
+### Migrasi dan rollback
+
+- Versi ini menambah migrasi DB ke-4: kolom `blocks.discord_sent` (default 1, jadi block lama dianggap sudah diposting). Backup `bot.db` dulu sebelum deploy (bagian 9).
+- Kode lama tetap bisa jalan di DB yang sudah termigrasi: migrasi yang tidak dikenal dilewati dan query-nya tidak menyentuh kolom baru. Efeknya hanya: block yang tersimpan selama kode lama jalan tidak akan diposting ke Discord.
+- Menghapus kolomnya (hanya kalau benar-benar perlu, bot dalam keadaan berhenti):
+  ```sql
+  DROP INDEX idx_blocks_discord_unsent;
+  ALTER TABLE blocks DROP COLUMN discord_sent;
+  PRAGMA user_version = 3;
+  ```
