@@ -1,3 +1,7 @@
+# Fixed project name: the clone's folder name must not change the volume
+# (cointmu-telegram-bot_bot-data) or the network nginx allows (172.19.0.0/16).
+name: cointmu-telegram-bot
+
 services:
   bot:
     build: .
