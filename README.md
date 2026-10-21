@@ -109,7 +109,7 @@ docker compose logs -f bot
 - Container jalan sebagai user non-root, root filesystem read-only, `cap_drop: ALL`, dan **tidak mempublish port apa pun**. Bot hanya membuat koneksi keluar.
 - Data SQLite ada di volume `bot-data` (`/data/bot.db`).
 - Di dalam container, `127.0.0.1` adalah container itu sendiri. Pakai alamat node yang bisa dijangkau dari container (`http://<GETH_HOST>:<PORT>`), jangan `127.0.0.1`.
-- Berhenti: `docker compose down` (data tetap tersimpan). **Jangan** pakai `-v` kecuali memang ingin menghapus DB.
+- Berhenti: `docker compose stop`. Hindari `docker compose down`: data tetap tersimpan, tetapi network ikut dihapus dan bisa dibuat ulang dengan subnet lain (lihat bagian 9). **Jangan pernah** pakai `-v`, itu menghapus DB.
 
 ### Tanpa Docker
 
@@ -275,6 +275,18 @@ npm test            # vitest: unit + integrasi (mock RPC & mock Telegram di 127.
 npm run build
 ```
 
+Setiap PR dan push ke `main` menjalankan CI (`.github/workflows/`). Job-nya terpisah supaya bisa dijadikan required check:
+
+| Job                                                    | Isi                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------- |
+| `lint`, `typecheck`, `test`                            | `npm ci --ignore-scripts` lalu script npm yang sama seperti di atas |
+| `docker-build`                                         | `docker build .` (tidak di-push)                                    |
+| `secret-scan`                                          | gitleaks atas seluruh history git                                   |
+| `analyze (javascript-typescript)`, `analyze (actions)` | CodeQL                                                              |
+
+- Versi Node di CI dibaca dari `FROM node:<versi>` di `Dockerfile`, jadi cukup ganti di satu tempat (Dependabot juga mengusulkannya di sana).
+- Versi + sha256 gitleaks di `ci.yml` diganti manual; Dependabot tidak melihatnya.
+
 Struktur singkat:
 
 ```
@@ -293,3 +305,46 @@ src/
   db/                    SQLite (migrasi, repository)
   maintenance/           retensi data
 ```
+
+## 9. Produksi: server248
+
+Bot produksi jalan di **server248** dengan Docker Compose, dari clone git repo ini:
+
+| Item      | Nilai                                                                                   |
+| --------- | --------------------------------------------------------------------------------------- |
+| Folder    | `~/cointmu-bot` (clone `https://github.com/Cointmu-ORG/CointMU-Bot`)                    |
+| Project   | `cointmu-telegram-bot` (dikunci dengan `name:` di `docker-compose.yml`)                 |
+| Container | `cointmu-telegram-bot-bot-1`                                                            |
+| Volume DB | `cointmu-telegram-bot_bot-data` (`/data/bot.db` di container)                           |
+| Network   | `cointmu-telegram-bot_default`, 172.19.0.0/16                                           |
+| RPC       | lewat proxy nginx di host, yang mengizinkan 172.19.0.0/16; nilainya hanya ada di `.env` |
+
+- `.env` hanya ada di server (mode `600`), tidak pernah di git. Isi minimal `RPC_URL` dan `BOT_TOKEN` (lihat bagian 3 dan `.env.example`).
+- Nama project dikunci supaya volume dan network tetap sama, apa pun nama foldernya. Proxy RPC hanya mengizinkan subnet 172.19.0.0/16; kalau network dibuat ulang (mis. setelah `docker compose down`) dengan subnet lain, bot tidak bisa menjangkau node. Cek dengan `docker network inspect cointmu-telegram-bot_default`.
+
+### Deploy dari git
+
+Semua perubahan masuk lewat PR ke `main` (CI hijau dulu). Setelah merge:
+
+```bash
+ssh server248
+cd ~/cointmu-bot
+git pull --ff-only
+docker compose up -d --build     # build dulu, lalu satu restart container
+docker compose logs -f bot       # cek "running" dan "digest sent"
+```
+
+- Restart aman: block yang sudah terkirim tidak dikirim ulang, block yang terlewat selama restart dikirim setelahnya (bagian 6).
+- Sebelum deploy yang membawa migrasi DB, backup dulu:
+  `docker exec cointmu-telegram-bot-bot-1 node -e "require('better-sqlite3')('/data/bot.db',{readonly:true}).backup('/tmp/bot.db.bak').then(()=>console.log('ok'))"`
+  lalu `docker cp cointmu-telegram-bot-bot-1:/tmp/bot.db.bak ~/backups/bot.db-$(date +%F)`.
+
+### Rollback
+
+```bash
+cd ~/cointmu-bot
+git checkout <commit-sebelumnya>
+docker compose up -d --build
+```
+
+Kembali ke `main` dengan `git checkout main && git pull --ff-only` setelah perbaikannya di-merge.
