@@ -111,4 +111,11 @@ export const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX idx_pending_actions_expires ON pending_actions (expires_at);
   `,
+  `
+  -- Discord #block-update delivery, tracked apart from Telegram's sent/message_ref.
+  -- Existing rows count as delivered, so turning Discord on never posts old blocks.
+  ALTER TABLE blocks ADD COLUMN discord_sent INTEGER NOT NULL DEFAULT 1
+    CHECK (discord_sent IN (0, 1));
+  CREATE INDEX idx_blocks_discord_unsent ON blocks (status, discord_sent, number);
+  `,
 ];

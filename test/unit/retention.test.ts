@@ -33,6 +33,7 @@ describe('RetentionJob', () => {
       retentionMs: 30 * DAY_MS,
       keepRecentBlocks: 3,
       isAnnouncing: () => true,
+      isDiscordEnabled: false,
       log: silentLog,
       now: () => 40 * DAY_MS,
     });
@@ -60,6 +61,7 @@ describe('RetentionJob', () => {
         retentionMs: 30 * DAY_MS,
         keepRecentBlocks: 3,
         isAnnouncing: () => isAnnouncing,
+        isDiscordEnabled: false,
         log: silentLog,
         now: () => 40 * DAY_MS,
       });
@@ -75,6 +77,40 @@ describe('RetentionJob', () => {
 
     it('are kept until announced while an announcement chat is set', async () => {
       expect(await runWith(true)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    });
+  });
+
+  describe('blocks announced on Telegram but not yet on Discord', () => {
+    // Same ages as above; every block is on Telegram, none on Discord.
+    const runWith = async (isDiscordEnabled: boolean) => {
+      const db = openDatabase(':memory:');
+      const blocks = new BlocksRepo(db);
+      const writer = new ChainWriter(db, blocks, 2, true);
+      writer.appendBlocks([0, 1, 2, 3, 4].map(chainBlock), { now: 0, isSeed: false });
+      writer.appendBlocks([5, 6, 7, 8, 9].map(chainBlock), { now: 30 * DAY_MS, isSeed: false });
+      db.exec('UPDATE blocks SET sent = 1');
+      const job = new RetentionJob({
+        db,
+        blocks,
+        retentionMs: 30 * DAY_MS,
+        keepRecentBlocks: 3,
+        isAnnouncing: () => true,
+        isDiscordEnabled,
+        log: silentLog,
+        now: () => 40 * DAY_MS,
+      });
+      await job.tick();
+      const remaining = blocks.listCanonicalRange(0, 100).map((b) => b.number);
+      db.close();
+      return remaining;
+    };
+
+    it('are kept until posted while Discord is enabled', async () => {
+      expect(await runWith(true)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    });
+
+    it('age out normally once Discord is turned off', async () => {
+      expect(await runWith(false)).toEqual([5, 6, 7, 8, 9]);
     });
   });
 });

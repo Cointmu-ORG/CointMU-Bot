@@ -79,6 +79,46 @@ describe('loadConfig', () => {
     }
   });
 
+  describe('DISCORD_WEBHOOK_BLOCK_UPDATE', () => {
+    const base = { RPC_URL, BOT_TOKEN: '123456:abc-DEF' };
+
+    it('is off when empty or unset', () => {
+      expect(loadConfig(base).discordWebhookUrl).toBeNull();
+      expect(
+        loadConfig({ ...base, DISCORD_WEBHOOK_BLOCK_UPDATE: '' }).discordWebhookUrl,
+      ).toBeNull();
+    });
+
+    it.each([
+      'https://discord.com/api/webhooks/123456789/AbC_def-123',
+      'https://discordapp.com/api/webhooks/123456789/AbC_def-123',
+      'https://discord.com/api/v10/webhooks/123456789/AbC_def-123',
+    ])('accepts %s', (url) => {
+      expect(loadConfig({ ...base, DISCORD_WEBHOOK_BLOCK_UPDATE: url }).discordWebhookUrl).toBe(
+        url,
+      );
+    });
+
+    it.each([
+      'http://discord.com/api/webhooks/123456789/secret-part',
+      'https://discord.com.evil.example/api/webhooks/123456789/secret-part',
+      'https://evil.example/discord.com/api/webhooks/123456789/secret-part',
+      'https://hooks.slack.com/services/T000/B000/secret-part',
+      'https://discord.com/api/webhooks/123456789/secret-part?thread_id=1',
+    ])('rejects %s without echoing it', (url) => {
+      try {
+        loadConfig({ ...base, DISCORD_WEBHOOK_BLOCK_UPDATE: url });
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as ConfigError).issues).toEqual([
+          'DISCORD_WEBHOOK_BLOCK_UPDATE: must be https://discord.com/api/webhooks/<id>/<token>',
+        ]);
+        expect(String(error)).not.toContain('secret-part');
+      }
+    });
+  });
+
   it('parses id lists', () => {
     const config = loadConfig({ RPC_URL, DRY_RUN: '1', ALLOWED_USER_IDS: '1, 2,3' });
 

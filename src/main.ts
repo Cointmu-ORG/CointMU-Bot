@@ -18,6 +18,7 @@ async function main(): Promise<void> {
   }
   registerSecret(config.botToken);
   registerSecret(config.heartbeatUrl);
+  registerSecret(config.discordWebhookUrl);
   const log = createLogger(config.logLevel);
   const app = createApp(config, { log });
   const startup = new AbortController();
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
     dbPath: config.dbPath,
     commands: config.botToken !== null,
     heartbeat: config.heartbeatUrl !== null,
+    discord: config.isDryRun || config.discordWebhookUrl !== null,
   });
   try {
     await app.start(startup.signal);

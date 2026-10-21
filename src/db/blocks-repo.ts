@@ -1,11 +1,11 @@
 import { BlockStatus, type StoredBlock } from '../domain/block.js';
 import type { Db } from './database.js';
 
-const BLOCK_COLUMNS = `hash, number, parent_hash, miner, timestamp, difficulty, nonce, mix_hash,
+export const BLOCK_COLUMNS = `hash, number, parent_hash, miner, timestamp, difficulty, nonce, mix_hash,
   tx_count, first_seen_at, status, sent, message_ref, streak, block_time_s, hashrate_hps,
   is_first_for_wallet`;
 
-interface BlockRow {
+export interface BlockRow {
   hash: string;
   number: number;
   parent_hash: string;
@@ -25,7 +25,7 @@ interface BlockRow {
   is_first_for_wallet: number;
 }
 
-function toStoredBlock(row: BlockRow): StoredBlock {
+export function toStoredBlock(row: BlockRow): StoredBlock {
   return {
     number: row.number,
     hash: row.hash,

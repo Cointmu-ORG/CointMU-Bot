@@ -2,10 +2,14 @@ import type { Config } from './config.js';
 import { AdminsRepo } from './db/admins-repo.js';
 import { BlocksRepo } from './db/blocks-repo.js';
 import { openDatabase, type Db } from './db/database.js';
+import { DiscordRepo } from './db/discord-repo.js';
 import { IncidentsRepo } from './db/incidents-repo.js';
 import { KvRepo } from './db/kv-repo.js';
 import { MessagesRepo } from './db/messages-repo.js';
 import { SamplesRepo } from './db/samples-repo.js';
+import { DryRunDiscord } from './discord/dry-run.js';
+import { HttpDiscordWebhook } from './discord/http-client.js';
+import type { DiscordWebhook } from './discord/types.js';
 import type { HealthThresholds } from './health/conditions.js';
 import { HealthState } from './health/state.js';
 import { createLogger, type Logger } from './logger.js';
@@ -45,6 +49,9 @@ export interface Core {
   readonly health: HealthState;
   readonly chain: ChainReader;
   readonly telegram: RateLimitedTelegram;
+  /** Null when Discord is off (no webhook configured and not a dry-run). */
+  readonly discordWebhook: DiscordWebhook | null;
+  readonly discordRepo: DiscordRepo;
   /** Destinations and admins (env + SQLite). */
   readonly botSettings: BotSettings;
   readonly claim: AdminClaim;
@@ -55,6 +62,13 @@ export interface Core {
 function createTelegram(config: Config, overrides: AppOverrides): TelegramApi {
   if (config.botToken === null) return new DryRunTelegram(overrides.dryRunPrint);
   return new HttpTelegramApi({ token: config.botToken, baseUrl: overrides.telegramBaseUrl });
+}
+
+function createDiscordWebhook(config: Config, overrides: AppOverrides): DiscordWebhook | null {
+  if (config.isDryRun) return new DryRunDiscord(overrides.dryRunPrint);
+  return config.discordWebhookUrl === null
+    ? null
+    : new HttpDiscordWebhook(config.discordWebhookUrl);
 }
 
 function createBotSettings(config: Config, db: Db, kv: KvRepo): BotSettings {
@@ -100,6 +114,8 @@ export function createCore(config: Config, overrides: AppOverrides): Core {
       maxQueuedReplies: config.commandQueueMax,
       log,
     }),
+    discordWebhook: createDiscordWebhook(config, overrides),
+    discordRepo: new DiscordRepo(db),
     botSettings,
     claim: new AdminClaim({ db, kv, settings: botSettings, log, now }),
     render: { confirmations: config.confirmations, hashrateWindow: config.hashrateWindow },
