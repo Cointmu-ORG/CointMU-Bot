@@ -1,0 +1,16 @@
+node_modules
+dist
+data
+coverage
+.git
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+test
+README.md
+*.log
+logs
+.github
+.gitleaks.toml

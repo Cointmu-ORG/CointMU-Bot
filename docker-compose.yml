@@ -1,0 +1,40 @@
+# Fixed project name: the clone's folder name must not change the volume
+# (cointmu-telegram-bot_bot-data) or the network nginx allows (172.19.0.0/16).
+name: cointmu-telegram-bot
+
+services:
+  bot:
+    build: .
+    image: cointmu-telegram-bot:local
+    env_file: .env
+    environment:
+      DB_PATH: /data/bot.db
+    volumes:
+      - bot-data:/data
+    # No ports: the bot only makes outbound calls (node RPC, Telegram, heartbeat).
+    restart: unless-stopped
+    stop_grace_period: 40s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: ['CMD', 'node', 'dist/healthcheck.js']
+      interval: 60s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  bot-data:
