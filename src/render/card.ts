@@ -39,17 +39,18 @@ function renderStatus(state: BlockState, required: number): string {
   }
 }
 
-function renderBadges(block: CardBlock): string[] {
+/** Bonus lines for a card; `format` marks up values (Telegram <code>, Discord backticks). */
+export function renderBadges(block: CardBlock, format: (value: string) => string): string[] {
   const badges: string[] = [];
   if (block.isFirstForWallet) badges.push('🎉 Block pertama!');
   if (block.streak >= STREAK_MILESTONE && block.streak % STREAK_MILESTONE === 0) {
-    badges.push(`🔥 Streak: ${code(`x${block.streak}`)}`);
+    badges.push(`🔥 Streak: ${format(`x${block.streak}`)}`);
   }
   if (block.blockTimeS !== null && block.blockTimeS < FAST_BLOCK_SECONDS) {
-    badges.push(`🚀 Block time: ${code(`${block.blockTimeS} detik`)}`);
+    badges.push(`🚀 Block time: ${format(`${block.blockTimeS} detik`)}`);
   }
   if (block.blockTimeS !== null && block.blockTimeS > SLOW_BLOCK_SECONDS) {
-    badges.push(`🐢 Block time: ${code(`${block.blockTimeS} detik`)}`);
+    badges.push(`🐢 Block time: ${format(`${block.blockTimeS} detik`)}`);
   }
   return badges;
 }
@@ -68,7 +69,7 @@ export function renderCard(block: CardBlock, state: BlockState, settings: Render
     `💪 Difficulty: ${code(formatThousands(block.difficulty))}`,
     `⚡ Hashrate: ${code(hashrate)} (rata-rata ${settings.hashrateWindow} block)`,
     renderStatus(state, settings.confirmations),
-    ...renderBadges(block),
+    ...renderBadges(block, code),
   ].join('\n');
 }
 

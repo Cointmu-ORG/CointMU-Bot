@@ -17,6 +17,7 @@ import type { HealthState } from './health/state.js';
 import type { Logger } from './logger.js';
 import { RetentionJob } from './maintenance/retention.js';
 import type { ChainReader } from './rpc/client.js';
+import { DiscordSender } from './sender/discord-sender.js';
 import { Sender } from './sender/sender.js';
 import { StatusUpdater } from './sender/status-updater.js';
 import type { AdminClaim } from './settings/admin-claim.js';
@@ -38,6 +39,8 @@ export interface Components {
   readonly collector: Collector;
   readonly probe: NodeProbe;
   readonly sender: Sender;
+  /** Null when Discord is off. */
+  readonly discordSender: DiscordSender | null;
   readonly statusUpdater: StatusUpdater;
   readonly monitor: HealthMonitor;
   readonly heartbeat: Heartbeat | null;
@@ -63,7 +66,12 @@ function buildCollector(core: Core, monitor: HealthMonitor): Collector {
   return new Collector({
     chain: core.chain,
     blocks: core.blocks,
-    writer: new ChainWriter(core.db, core.blocks, core.config.hashrateWindow),
+    writer: new ChainWriter(
+      core.db,
+      core.blocks,
+      core.config.hashrateWindow,
+      core.discordWebhook !== null,
+    ),
     health: core.health,
     startBackfill: core.config.startBackfill,
     log: core.log,
@@ -85,6 +93,19 @@ function buildRetention(core: Core): RetentionJob {
     retentionMs: core.config.dataRetentionMs,
     keepRecentBlocks: Math.max(MAX_REORG_DEPTH, core.config.hashrateWindow + 1),
     isAnnouncing: () => core.botSettings.announceDestination() !== null,
+    isDiscordEnabled: core.discordWebhook !== null,
+    log: core.log,
+    now: core.now,
+  });
+}
+
+function buildDiscordSender(core: Core): DiscordSender | null {
+  if (core.discordWebhook === null) return null;
+  return new DiscordSender({
+    blocks: core.blocks,
+    discord: core.discordRepo,
+    webhook: core.discordWebhook,
+    settings: core.render,
     log: core.log,
     now: core.now,
   });
@@ -118,6 +139,7 @@ export function buildComponents(config: Config, overrides: AppOverrides): Compon
       log,
       now,
     }),
+    discordSender: buildDiscordSender(core),
     statusUpdater: new StatusUpdater({ blocks, messages, telegram, settings: render, log, now }),
     heartbeat: buildHeartbeat(core),
     retention: buildRetention(core),

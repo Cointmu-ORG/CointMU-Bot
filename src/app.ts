@@ -39,7 +39,7 @@ function startEarlyLoops(c: Components): Loop[] {
 
 /** Loops that read the chain: started only once the node reported the expected chain id. */
 function startChainLoops(c: Components, config: Config): Loop[] {
-  const { log, heartbeat } = c;
+  const { log, heartbeat, discordSender } = c;
   const loops = [
     startLoop('collector', config.pollIntervalMs, () => c.collector.tick(), log),
     startLoop('node-probe', NODE_PROBE_INTERVAL_MS, () => c.probe.tick(), log),
@@ -49,6 +49,9 @@ function startChainLoops(c: Components, config: Config): Loop[] {
   ];
   if (heartbeat) {
     loops.push(startLoop('heartbeat', HEARTBEAT_INTERVAL_MS, () => heartbeat.tick(), log));
+  }
+  if (discordSender) {
+    loops.push(startLoop('discord-sender', config.sendIntervalMs, () => discordSender.tick(), log));
   }
   return loops;
 }

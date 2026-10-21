@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createApp, type App } from '../../src/app.js';
 import type { Config } from '../../src/config.js';
 import type { Logger } from '../../src/logger.js';
+import { MockDiscord, startMockDiscord } from './mock-discord.js';
 import { MockChain, startMockRpc, type RunningServer } from './mock-rpc.js';
 import { MockTelegram, startMockTelegram, TEST_TOKEN } from './mock-telegram.js';
 
@@ -60,6 +61,7 @@ export function testConfig(overrides: Partial<Config> & Pick<Config, 'dbPath' | 
     rpcFailThreshold: 3,
     alertCooldownMs: 600_000,
     heartbeatUrl: null,
+    discordWebhookUrl: null,
     isDryRun: false,
     dataRetentionMs: 30 * 86_400_000,
     commandCooldownMs: 5_000,
@@ -71,26 +73,39 @@ export function testConfig(overrides: Partial<Config> & Pick<Config, 'dbPath' | 
   };
 }
 
-/** Mock node + mock Telegram + a fake clock, with apps created against a temp DB. */
+/**
+ * Mock node + mock Telegram + mock Discord webhook + a fake clock, with apps created against a
+ * temp DB. Discord is on by default, so every Telegram test also runs with Discord enabled.
+ */
 export class Harness {
   readonly chain = new MockChain(101);
   readonly telegram = new MockTelegram();
+  readonly discord = new MockDiscord();
   readonly dir = mkdtempSync(join(tmpdir(), 'cointmu-bot-test-'));
   readonly logs: LogEntry[] = [];
   clock = START_TIME;
   private rpc: RunningServer | null = null;
   private telegramServer: RunningServer | null = null;
+  private discordServer: RunningServer | null = null;
   private readonly apps: App[] = [];
 
   async start(): Promise<void> {
     this.rpc = await startMockRpc(this.chain);
     this.telegramServer = await startMockTelegram(this.telegram);
+    this.discordServer = await startMockDiscord(this.discord);
   }
 
   createApp(overrides: Partial<Config> = {}): App {
-    if (!this.rpc || !this.telegramServer) throw new Error('harness not started');
+    if (!this.rpc || !this.telegramServer || !this.discordServer) {
+      throw new Error('harness not started');
+    }
     const app = createApp(
-      testConfig({ dbPath: join(this.dir, 'bot.db'), rpcUrl: this.rpc.url, ...overrides }),
+      testConfig({
+        dbPath: join(this.dir, 'bot.db'),
+        rpcUrl: this.rpc.url,
+        discordWebhookUrl: this.discordServer.url,
+        ...overrides,
+      }),
       {
         log: createMemoryLog(this.logs),
         now: () => this.clock,
@@ -122,6 +137,7 @@ export class Harness {
     await Promise.all(this.apps.splice(0).map((app) => app.stop()));
     await this.rpc?.close();
     await this.telegramServer?.close();
+    await this.discordServer?.close();
     rmSync(this.dir, { recursive: true, force: true });
   }
 }

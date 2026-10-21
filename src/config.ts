@@ -13,6 +13,8 @@ const MS_PER_DAY = 86_400_000;
 const BOT_TOKEN_PATTERN = /^\d+:[\w-]+$/;
 const CHAT_ID_PATTERN = /^(-?\d+|@\w{5,})$/;
 const USER_ID_PATTERN = /^\d+$/;
+const DISCORD_WEBHOOK_PATTERN =
+  /^https:\/\/(discord\.com|discordapp\.com)\/api(\/v\d+)?\/webhooks\/\d+\/[\w-]+$/;
 
 const int = (fallback: number, min: number) => z.coerce.number().int().min(min).default(fallback);
 const decimal = (fallback: number) => z.coerce.number().min(0).default(fallback);
@@ -48,6 +50,10 @@ const envSchema = z.object({
   RPC_FAIL_THRESHOLD: int(10, 1),
   ALERT_COOLDOWN_MINUTES: decimal(10),
   HEARTBEAT_URL: z.url().optional(),
+  DISCORD_WEBHOOK_BLOCK_UPDATE: z
+    .string()
+    .regex(DISCORD_WEBHOOK_PATTERN, 'must be https://discord.com/api/webhooks/<id>/<token>')
+    .optional(),
   DB_PATH: z.string().min(1).optional(),
   DRY_RUN: z
     .enum(['true', 'false', '1', '0'])
@@ -86,6 +92,11 @@ export interface Config {
   readonly rpcFailThreshold: number;
   readonly alertCooldownMs: number;
   readonly heartbeatUrl: string | null;
+  /**
+   * Discord #block-update webhook, a secret (anyone holding it can post); null = Discord off.
+   * Dry-run never posts: it prints the Discord payloads even when this is null.
+   */
+  readonly discordWebhookUrl: string | null;
   readonly dbPath: string;
   readonly isDryRun: boolean;
   readonly dataRetentionMs: number;
@@ -157,6 +168,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     rpcFailThreshold: e.RPC_FAIL_THRESHOLD,
     alertCooldownMs: e.ALERT_COOLDOWN_MINUTES * MS_PER_MINUTE,
     heartbeatUrl: e.HEARTBEAT_URL ?? null,
+    discordWebhookUrl: e.DISCORD_WEBHOOK_BLOCK_UPDATE ?? null,
     dbPath: e.DB_PATH ?? (e.DRY_RUN ? DEFAULT_DRY_RUN_DB_PATH : DEFAULT_DB_PATH),
     isDryRun: e.DRY_RUN,
     dataRetentionMs: e.DATA_RETENTION_DAYS * MS_PER_DAY,

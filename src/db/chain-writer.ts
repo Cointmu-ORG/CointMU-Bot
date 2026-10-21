@@ -24,14 +24,19 @@ export class ChainWriter {
     private readonly db: Db,
     private readonly blocks: BlocksRepo,
     private readonly hashrateWindow: number,
+    /**
+     * While false, new blocks are stored as already on Discord, so turning Discord on later
+     * posts only blocks from then on.
+     */
+    private readonly isDiscordEnabled = false,
   ) {
     this.upsertBlockStmt = db.prepare(
       `INSERT INTO blocks (hash, number, parent_hash, miner, timestamp, difficulty, nonce, mix_hash,
-         tx_count, first_seen_at, status, sent, streak, block_time_s, hashrate_hps,
+         tx_count, first_seen_at, status, sent, discord_sent, streak, block_time_s, hashrate_hps,
          is_first_for_wallet, created_at, updated_at)
        VALUES (@hash, @number, @parentHash, @miner, @timestamp, @difficulty, @nonce, @mixHash,
-         @txCount, @now, '${BlockStatus.CANONICAL}', @sent, @streak, @blockTimeS, @hashrateHps,
-         @isFirstForWallet, @now, @now)
+         @txCount, @now, '${BlockStatus.CANONICAL}', @sent, @discordSent, @streak, @blockTimeS,
+         @hashrateHps, @isFirstForWallet, @now, @now)
        ON CONFLICT (hash) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at`,
     );
     this.insertWalletStmt = db.prepare(
@@ -94,6 +99,7 @@ export class ChainWriter {
       txCount: block.txCount,
       now,
       sent: isSeed ? 1 : 0,
+      discordSent: isSeed || !this.isDiscordEnabled ? 1 : 0,
       streak: parent?.miner === block.miner ? parent.streak + 1 : 1,
       blockTimeS: parent ? block.timestamp - parent.timestamp : null,
       hashrateHps: computeHashrate([...window, block]),

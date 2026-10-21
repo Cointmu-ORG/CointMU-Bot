@@ -16,6 +16,8 @@ export interface RetentionDeps {
    * they are kept until announced.
    */
   readonly isAnnouncing: () => boolean;
+  /** While true, canonical blocks not yet on Discord are kept until posted. */
+  readonly isDiscordEnabled: boolean;
   readonly log: Logger;
   readonly now: () => number;
 }
@@ -32,7 +34,8 @@ export class RetentionJob {
     const { db } = deps;
     const deleteBlocks = db.prepare(
       `DELETE FROM blocks WHERE first_seen_at < @cutoff AND number < @minNumber
-         AND (sent = 1 OR status = '${BlockStatus.ORPHANED}' OR @includeUnsent = 1)`,
+         AND (status = '${BlockStatus.ORPHANED}'
+           OR ((sent = 1 OR @includeUnsent = 1) AND (discord_sent = 1 OR @includeDiscordUnsent = 1)))`,
     );
     const deleteMessages = db.prepare(
       `DELETE FROM messages WHERE is_settled = 1 AND updated_at < @cutoff
@@ -44,7 +47,12 @@ export class RetentionJob {
       'DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < @cutoff',
     );
     this.purge = db.transaction((cutoff: number, minNumber: number, includeUnsent: boolean) => {
-      const params = { cutoff, minNumber, includeUnsent: includeUnsent ? 1 : 0 };
+      const params = {
+        cutoff,
+        minNumber,
+        includeUnsent: includeUnsent ? 1 : 0,
+        includeDiscordUnsent: deps.isDiscordEnabled ? 0 : 1,
+      };
       return {
         blocks: deleteBlocks.run(params).changes,
         messages: deleteMessages.run({ cutoff }).changes,
