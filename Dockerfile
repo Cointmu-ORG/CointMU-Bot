@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build: compile TypeScript, then drop dev dependencies ----
-FROM node:22.22.1-bookworm-slim AS build
+FROM node:26.12.0-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # better-sqlite3 ships prebuilt binaries (prebuilds/linux-x64.node); skipping scripts avoids
@@ -12,7 +12,7 @@ COPY src ./src
 RUN npm run build && npm prune --omit=dev --ignore-scripts
 
 # ---- runtime: only compiled JS + production dependencies, non-root ----
-FROM node:22.22.1-bookworm-slim AS runtime
+FROM node:26.12.0-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     DB_PATH=/data/bot.db
 WORKDIR /app
