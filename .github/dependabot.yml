@@ -15,6 +15,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # CodeQL refuses to run when init and analyze are on different versions,
+      # so they have to be bumped in the same PR.
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
 
   # The Dockerfile's node tag is also the Node version CI runs on.
   - package-ecosystem: docker
