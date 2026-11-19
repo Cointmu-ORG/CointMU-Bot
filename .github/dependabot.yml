@@ -5,11 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # One PR for all npm bumps instead of one per dependency.
     groups:
-      dev-dependencies:
-        dependency-type: development
-      production-dependencies:
-        dependency-type: production
+      npm-dependencies:
+        patterns: ["*"]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
     ignore:
       # typescript-eslint peers typescript <6.1.0, so a typescript 7 bump
       # breaks `npm ci`. Drop this once typescript-eslint supports 7.
@@ -23,12 +25,15 @@ updates:
     groups:
       # CodeQL refuses to run when init and analyze are on different versions,
       # so they have to be bumped in the same PR.
-      codeql-action:
-        patterns:
-          - "github/codeql-action/*"
+      # One PR for all actions, which also keeps them together.
+      actions:
+        patterns: ["*"]
 
   # The Dockerfile's node tag is also the Node version CI runs on.
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    groups:
+      docker:
+        patterns: ["*"]
